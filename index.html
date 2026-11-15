@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="レース">
+<title>バーチャートレースメーカー</title>
+<style>
+:root{--bg:#fafaf7;--card:#fff;--text:#1f2328;--sub:#6b7280;--line:#e5e7eb;--accent:#4f46e5;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14151a;--card:#1d1f26;--text:#eceef2;--sub:#9aa0ab;--line:#2b2e37;--accent:#818cf8;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14151a;--card:#1d1f26;--text:#eceef2;--sub:#9aa0ab;--line:#2b2e37;--accent:#818cf8;color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;line-height:1.5}
+main{max-width:760px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:4px 0 14px}
+h2{font-size:14px;margin:0 0 10px;color:var(--sub)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:14px}
+.form,.tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.tools{margin-top:10px}
+input,select,textarea{font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-width:0}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent)}
+.f1{flex:1 1 90px}.f2{flex:2 1 110px}
+button,.btn{font:inherit;border:0;border-radius:10px;padding:10px 14px;cursor:pointer;background:var(--accent);color:#fff;font-weight:600;display:inline-block}
+button.ghost,.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);font-weight:500}
+button:disabled{opacity:.45;cursor:default}
+.tools select{padding:8px 10px;max-width:100%}
+#cv{display:block;margin:0 auto;width:auto;height:auto;max-width:100%;max-height:62vh;border-radius:10px}
+#seek{width:100%;margin:12px 0 0;padding:0;accent-color:var(--accent)}
+.hint{font-size:12px;color:var(--sub);margin:6px 0 0}
+.msg{font-size:13px;margin:8px 0 0;min-height:1.2em}
+.rec{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.rec input{padding:7px 9px;font-size:14px}
+.rec .rd{flex:1 1 120px}.rec .rn{flex:2 1 80px}.rec .rv{flex:1 1 60px}
+.rec button{padding:7px 10px;background:transparent;color:var(--sub);border:1px solid var(--line)}
+.rec2{margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.rec2 input{flex:1 1 80px;font-size:13px;color:var(--sub)}
+textarea{width:100%;height:90px;font-size:13px;margin-bottom:8px}
+details summary{cursor:pointer;color:var(--sub);font-size:14px}
+#vwrap{display:none;margin-top:12px;text-align:center}
+#prev{max-width:100%;max-height:50vh;border-radius:10px;background:#000}
+#title{flex:1 1 100%}
+label.chk{font-size:14px;display:flex;gap:4px;align-items:center}
+label.chk input{padding:0}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<main>
+<h1>🏁 バーチャートレースメーカー</h1>
+
+<div class="card">
+  <h2>手で入力</h2>
+  <div class="form">
+    <input id="d" class="f1" type="date" aria-label="日" style="flex-basis:140px">
+    <input id="n" class="f2" type="text" placeholder="項目名" aria-label="項目名">
+    <input id="v" class="f1" type="number" inputmode="decimal" placeholder="値" value="1" aria-label="値" style="flex-basis:70px">
+    <button id="add">追加</button>
+  </div>
+  <div class="form" style="margin-top:8px">
+    <input id="ag" class="f1" type="text" placeholder="グループ(任意)" aria-label="グループ">
+    <input id="ae" class="f1" type="text" placeholder="会場(任意)" aria-label="会場">
+    <input id="al" class="f1" type="text" placeholder="ライブ名(任意)" aria-label="ライブ名">
+  </div>
+  <p class="hint">同じ日・同じ項目を複数回入れると合算されます。</p>
+</div>
+
+<div class="card">
+  <h2>スプレッドシートから読み込む</h2>
+  <div class="form">
+    <label class="btn" for="file">📂 ファイルを選ぶ</label>
+    <input id="file" type="file" accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm" style="display:none">
+    <label class="chk"><input type="checkbox" id="repl" checked> 今のデータを置き換える</label>
+  </div>
+  <p class="hint">見出しが「日・項目・値・グループ・会場・ライブ名」なら列の順番が違っても読み込めます。見出しがない場合は、この順番の列として読みます(グループ以降は省略可)。Excel(.xlsx)とCSVに対応。</p>
+  <div class="msg" id="imsg"></div>
+</div>
+
+<div class="card">
+  <div class="form"><input id="title" type="text" placeholder="タイトル(動画に表示)" value="チェキ枚数"></div>
+  <div class="tools" style="margin-top:12px"><canvas id="cv" width="720" height="1280"></canvas></div>
+  <input id="seek" type="range" min="0" max="0" value="0" step="any" aria-label="日付を選ぶ">
+  <div class="tools">
+    <button id="play">▶ 再生</button>
+    <button class="ghost" id="reset">⏮</button>
+    <select id="mode" aria-label="集計方法"><option value="cum" selected>累計</option><option value="day">その日の値</option></select>
+    <select id="top" aria-label="表示件数"><option value="5">上位5</option><option value="10" selected>上位10</option><option value="15">上位15</option></select>
+    <select id="speed" aria-label="速度"><option value="1400">ゆっくり</option><option value="800" selected>ふつう</option><option value="350">はやい</option><option value="120">超はやい</option></select>
+  </div>
+  <h2 style="margin:14px 0 0">バーの設定と絞り込み</h2>
+  <div class="tools" style="margin-top:6px">
+    <select id="unit" aria-label="バーの単位"><option value="name" selected>バー=項目</option><option value="group">バー=グループ</option><option value="venue">バー=会場</option><option value="live">バー=ライブ名</option></select>
+    <select id="color" aria-label="色分け"><option value="bar" selected>色:バーごと</option><option value="group">色:グループごと</option></select>
+    <label class="chk"><input type="checkbox" id="showg" checked> グループ名を表示</label>
+  </div>
+  <div class="tools">
+    <select id="fg" aria-label="グループで絞り込み"></select>
+    <select id="fv" aria-label="会場で絞り込み"></select>
+    <select id="fl" aria-label="ライブ名で絞り込み"></select>
+  </div>
+  <h2 style="margin:14px 0 0">動画</h2>
+  <div class="tools" style="margin-top:6px">
+    <select id="shape" aria-label="動画の形"><option value="v" selected>縦 9:16</option><option value="s">正方形</option><option value="h">横 16:9</option></select>
+    <select id="theme" aria-label="背景"><option value="d" selected>ダーク背景</option><option value="l">ライト背景</option></select>
+    <button id="rec">🎬 動画を作る</button>
+  </div>
+  <div class="msg" id="rmsg"></div>
+  <div id="vwrap">
+    <video id="prev" controls playsinline muted></video><br>
+    <button id="save" style="margin-top:10px">📱 動画を保存</button>
+    <p class="hint">iPhoneでは共有画面が開くので「ビデオを保存」を選ぶとカメラロールに入ります。</p>
+  </div>
+</div>
+
+<div class="card">
+  <h2>入力データ <span id="sum" style="font-weight:400"></span></h2>
+  <div id="list"></div>
+  <details style="margin-top:10px">
+    <summary>まとめて貼り付け・書き出し</summary>
+    <p class="hint">スプレッドシートのセルを見出しごとコピーして貼り付けられます。</p>
+    <textarea id="bulk" placeholder="日&#9;項目&#9;値&#9;グループ&#9;会場&#9;ライブ名"></textarea>
+    <button class="ghost" id="import">取り込む</button>
+    <button class="ghost" id="csv">CSVで保存</button>
+    <button class="ghost" id="clear">全削除</button>
+  </details>
+</div>
+</main>
+
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var palette=['#6366f1','#f59e0b','#10b981','#ef4444','#06b6d4','#ec4899','#84cc16','#8b5cf6','#f97316','#14b8a6','#0ea5e9','#a16207'];
+  function colorFor(i){return i<palette.length?palette[i]:'hsl('+((i*137)%360)+',65%,55%)'}
+  var recs=[],nextId=1,pos=0,playing=false,last=0,dirty=true,needBuild=true;
+  var recording=false,holdUntil=0,mr=null,chunks=[],vidBlob=null,vidExt='mp4',mime='';
+  var B={names:[],groups:[],F:[],rows:0,int:true,useGroup:false};
+  var cv=$('cv'),ctx=cv.getContext('2d');
+  var FF='"Hiragino Sans","Noto Sans JP",sans-serif';
+
+  function pad(n){return n<10?'0'+n:''+n}
+  function today(){var t=new Date();return t.getFullYear()+'-'+pad(t.getMonth()+1)+'-'+pad(t.getDate())}
+  function normDate(c){
+    if(typeof c==='number'&&c>20000&&c<80000){
+      var u=new Date(Math.round((c-25569)*86400000));
+      return u.getUTCFullYear()+'-'+pad(u.getUTCMonth()+1)+'-'+pad(u.getUTCDate());
+    }
+    var s=String(c).trim();
+    var m=s.match(/^(\d{4})[\/\-.年](\d{1,2})[\/\-.月](\d{1,2})日?/);
+    return m?m[1]+'-'+pad(+m[2])+'-'+pad(+m[3]):s;
+  }
+  function parseNum(c){
+    if(typeof c==='number')return c;
+    var s=String(c).replace(/[,\s]/g,'').replace(/[０-９．－]/g,function(ch){return ch==='．'?'.':ch==='－'?'-':String.fromCharCode(ch.charCodeAt(0)-65248)});
+    return s===''?NaN:Number(s);
+  }
+  function addRec(d,n,v,g,e,l){recs.push({id:nextId++,date:d,name:n,value:v,group:g||'',venue:e||'',live:l||''})}
+  function parseTable(t){
+    var dl=t.indexOf('\t')>=0?'\t':',',rows=[],row=[],c='',q=false;
+    for(var i=0;i<t.length;i++){
+      var ch=t[i];
+      if(q){if(ch==='"'){if(t[i+1]==='"'){c+='"';i++}else q=false}else c+=ch}
+      else if(ch==='"')q=true;
+      else if(ch===dl){row.push(c);c=''}
+      else if(ch==='\n'){row.push(c);rows.push(row);row=[];c=''}
+      else if(ch!=='\r')c+=ch;
+    }
+    row.push(c);rows.push(row);return rows;
+  }
+  function rowsToRecs(rows){
+    var map={d:0,n:1,v:2,g:3,e:4,l:5},start=0,out=[];
+    if(rows.length&&rows[0].length>=3&&isNaN(parseNum(rows[0][2]))){
+      var h=rows[0].map(String);
+      var f=function(re,def){var i=h.findIndex(function(x){return re.test(x)});return i>=0?i:def};
+      map={d:f(/日|date/i,0),n:f(/項目|name/i,1),v:f(/値|数|value/i,2),g:f(/グループ|group/i,3),e:f(/会場|venue/i,4),l:f(/ライブ|イベント|live|event/i,5)};
+      start=1;
+    }
+    for(var i=start;i<rows.length;i++){
+      var r=rows[i];if(r.length<3)continue;
+      var c=function(k){return k<r.length&&r[k]!=null?String(r[k]).trim():''};
+      var v=parseNum(r[map.v]),n=c(map.n),d=normDate(r[map.d]);
+      if(isNaN(v)||!n||!d)continue;
+      out.push({d:d,n:n,v:v,g:c(map.g),e:c(map.e),l:c(map.l)});
+    }
+    return out;
+  }
+
+  /* ---- 集計 ---- */
+  function build(){
+    var cum=$('mode').value==='cum',topN=parseInt($('top').value,10),unit=$('unit').value;
+    var fg=$('fg').value,fv=$('fv').value,fl=$('fl').value;
+    var valid=recs.filter(function(r){
+      return r.date&&r[unit]&&(!fg||r.group===fg)&&(!fv||r.venue===fv)&&(!fl||r.live===fl);
+    });
+    var idx=new Map(),names=[],gidx=new Map(),groups=[],int=true;
+    valid.forEach(function(r){
+      if(!idx.has(r[unit])){idx.set(r[unit],names.length);names.push(r[unit])}
+      if(r.group&&!gidx.has(r.group)){gidx.set(r.group,groups.length);groups.push(r.group)}
+      if(r.value%1!==0)int=false;
+    });
+    var sorted=valid.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.id-b.id});
+    var N=names.length,cur=new Float64Array(N),seen=new Uint8Array(N),cg=new Int16Array(N).fill(-1),F=[],i=0;
+    while(i<sorted.length){
+      var d=sorted[i].date;
+      if(!cum)cur.fill(0);
+      while(i<sorted.length&&sorted[i].date===d){
+        var r=sorted[i++],k=idx.get(r[unit]);
+        cur[k]+=r.value;seen[k]=1;
+        if(r.group)cg[k]=gidx.get(r.group);
+      }
+      var v=cur.slice(),order=[];
+      for(var k2=0;k2<N;k2++)if(seen[k2])order.push(k2);
+      order.sort(function(a,b){return v[b]-v[a]||a-b});
+      var rank=new Int16Array(N).fill(N);
+      order.forEach(function(k,p){rank[k]=p});
+      F.push({date:d,v:v,rank:rank,grp:cg.slice(),max:order.length?Math.max(v[order[0]],1e-9):1});
+    }
+    B={names:names,groups:groups,F:F,rows:Math.min(topN,N),int:int,
+       useGroup:unit==='name'&&$('color').value==='group',showG:unit==='name'&&$('showg').checked};
+    $('seek').max=Math.max(0,F.length-1);
+    if(pos>F.length-1)pos=Math.max(0,F.length-1);
+    needBuild=false;dirty=true;
+  }
+  function ensure(){if(needBuild)build()}
+  function changed(){needBuild=true;dirty=true}
+
+  /* ---- 描画 ---- */
+  function sm(x){return x*x*(3-2*x)}
+  function theme(){return $('theme').value==='l'?{bg:'#fafaf7',fg:'#1f2328',sub:'#6b7280'}:{bg:'#14151a',fg:'#eceef2',sub:'#9aa0ab'}}
+  function fit(t,w){
+    if(ctx.measureText(t).width<=w)return t;
+    while(t.length>1&&ctx.measureText(t+'…').width>w)t=t.slice(0,-1);
+    return t+'…';
+  }
+  function rr(x,y,w,h,r){
+    r=Math.min(r,w/2,h/2);
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fill();
+  }
+  function fv(v){return B.int?Math.round(v).toLocaleString():(Math.round(v*10)/10).toLocaleString()}
+  function draw(p){
+    var W=cv.width,H=cv.height,s=Math.min(W,H)/720,T=theme();
+    ctx.fillStyle=T.bg;ctx.fillRect(0,0,W,H);ctx.textBaseline='middle';
+    var title=$('title').value;
+    if(title){ctx.fillStyle=T.fg;ctx.font='bold '+(34*s)+'px '+FF;ctx.textAlign='left';ctx.fillText(fit(title,W-80*s),40*s,70*s)}
+    var n=B.F.length;
+    if(!n){ctx.fillStyle=T.sub;ctx.font=(26*s)+'px '+FF;ctx.textAlign='center';ctx.fillText('データがありません',W/2,H/2);return}
+    var i=Math.min(Math.floor(p),n-1),j=Math.min(i+1,n-1),g=i===j?0:sm(Math.min(1,(p-i)/0.75));
+    var a=B.F[i],b=B.F[j],rows=B.rows;
+    var aTop=130*s,aBot=H-120*s,rh=Math.min((aBot-aTop)/rows,84*s);
+    var labelR=200*s,barX=labelR+16*s,barW=W-barX-120*s;
+    var max=a.max+(b.max-a.max)*g;
+    for(var k=0;k<B.names.length;k++){
+      var ra=Math.min(a.rank[k],rows),rb=Math.min(b.rank[k],rows);
+      var al=(a.rank[k]<rows?1:0)*(1-g)+(b.rank[k]<rows?1:0)*g;
+      if(al<0.02)continue;
+      var y=aTop+(ra+(rb-ra)*g)*rh,val=a.v[k]+(b.v[k]-a.v[k])*g;
+      var w=Math.max(0,val)/max*barW,cy=y+rh/2;
+      var gi=(g>.5?b:a).grp[k];
+      ctx.globalAlpha=al;
+      ctx.fillStyle=B.useGroup?(gi>=0?colorFor(gi):'#888'):colorFor(k);
+      rr(barX,y+rh*0.14,w,rh*0.72,8*s);
+      var two=B.showG&&gi>=0&&rh>=54*s;
+      ctx.fillStyle=T.fg;ctx.font=(24*s)+'px '+FF;ctx.textAlign='right';
+      ctx.fillText(fit(B.names[k],labelR-40*s),labelR,two?cy-10*s:cy);
+      if(two){ctx.fillStyle=T.sub;ctx.font=(15*s)+'px '+FF;ctx.fillText(fit(B.groups[gi],labelR-40*s),labelR,cy+14*s)}
+      ctx.fillStyle=T.sub;ctx.font=(22*s)+'px '+FF;ctx.textAlign='left';
+      ctx.fillText(fv(val),barX+w+10*s,cy);
+    }
+    ctx.globalAlpha=.5;ctx.fillStyle=T.sub;ctx.font='bold '+(64*s)+'px '+FF;ctx.textAlign='right';
+    ctx.fillText(B.F[g>.5?j:i].date,W-40*s,H-60*s);ctx.globalAlpha=1;
+  }
+
+  /* ---- 再生ループ ---- */
+  function setPlayLabel(){$('play').textContent=playing&&!recording?'⏸ 停止':'▶ 再生'}
+  function tick(ts){
+    requestAnimationFrame(tick);
+    ensure();
+    var n=B.F.length;
+    if(playing){
+      pos+=Math.min(ts-last,100)/parseInt($('speed').value,10);
+      if(pos>=n-1){pos=Math.max(0,n-1);playing=false;setPlayLabel();if(recording)holdUntil=ts+1600}
+      dirty=true;
+    }
+    last=ts;
+    if(recording&&!playing&&holdUntil&&ts>=holdUntil){holdUntil=0;stopRec()}
+    if(recording)$('rmsg').textContent='録画中… '+(n>1?Math.round(pos/(n-1)*100):100)+'%(画面を閉じずにお待ちください)';
+    if(playing||recording||dirty){draw(pos);dirty=false;$('seek').value=pos}
+  }
+  function play(){
+    ensure();if(!B.F.length)return;
+    if(pos>=B.F.length-1)pos=0;
+    playing=true;last=performance.now();setPlayLabel();
+  }
+  function pause(){playing=false;setPlayLabel()}
+
+  /* ---- 動画 ---- */
+  var LOCK=['play','rec','shape','mode','top','speed','theme','unit','color','fg','fv','fl'];
+  function lockUI(on){LOCK.forEach(function(i){$(i).disabled=on})}
+  function startRec(){
+    if(!window.MediaRecorder||!cv.captureStream){$('rmsg').textContent='このブラウザは動画の作成に対応していません。';return}
+    ensure();if(!B.F.length)return;
+    var c=['video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm'];
+    mime=c.filter(function(m){return MediaRecorder.isTypeSupported(m)})[0]||'';
+    try{mr=new MediaRecorder(cv.captureStream(30),mime?{mimeType:mime,videoBitsPerSecond:6000000}:{videoBitsPerSecond:6000000})}
+    catch(e){$('rmsg').textContent='動画の作成を開始できませんでした。';return}
+    chunks=[];mr.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data)};
+    mr.onstop=finishRec;
+    $('vwrap').style.display='none';
+    pos=0;draw(0);recording=true;holdUntil=0;lockUI(true);
+    mr.start();playing=true;last=performance.now();
+  }
+  function stopRec(){recording=false;try{mr.stop()}catch(e){}}
+  function finishRec(){
+    var type=(mr.mimeType||mime||'video/webm').split(';')[0];
+    vidBlob=new Blob(chunks,{type:type});vidExt=type.indexOf('mp4')>=0?'mp4':'webm';
+    $('prev').src=URL.createObjectURL(vidBlob);
+    $('vwrap').style.display='block';
+    $('rmsg').textContent='動画ができました!('+(vidBlob.size/1048576).toFixed(1)+'MB)';
+    lockUI(false);setPlayLabel();
+  }
+
+  /* ---- 保存(Claude上 / 自分のサイトの両対応) ---- */
+  function saveFile(name,data,el){
+    var blob=data instanceof Blob?data:new Blob([data],{type:'text/csv;charset=utf-8'});
+    function dl(){
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+      document.body.appendChild(a);a.click();a.remove();
+      el.textContent='ダウンロードしました(保存先はブラウザの設定によります)。';
+    }
+    function fallback(){
+      try{
+        var f=new File([blob],name,{type:blob.type});
+        if(navigator.canShare&&navigator.canShare({files:[f]})){
+          navigator.share({files:[f]}).then(function(){el.textContent='共有画面を開きました。'})
+            .catch(function(e){if(e&&e.name==='AbortError')el.textContent='キャンセルしました。';else dl()});
+          return;
+        }
+      }catch(e){}
+      dl();
+    }
+    if(window.claude&&window.claude.use){
+      window.claude.use('downloads').then(function(d){
+        if(!d){fallback();return}
+        return d.save({filename:name,data:blob}).then(function(){el.textContent='保存しました。'});
+      }).catch(function(e){
+        el.textContent=e&&e.code==='declined'?'保存をキャンセルしました。':'保存できませんでした。'+(e&&e.message?'('+e.message+')':'');
+      });
+    }else fallback();
+  }
+
+  /* ---- データ編集 ---- */
+  function refreshFilters(){
+    [['fg','group','グループ'],['fv','venue','会場'],['fl','live','ライブ名']].forEach(function(x){
+      var el=$(x[0]),cur=el.value,set={};
+      recs.forEach(function(r){if(r[x[1]])set[r[x[1]]]=1});
+      el.innerHTML='';el.add(new Option(x[2]+':すべて',''));
+      Object.keys(set).sort().forEach(function(k){el.add(new Option(k,k))});
+      el.value=set[cur]?cur:'';
+    });
+  }
+  function mk(tag,type,cls,val,ph){
+    var e=document.createElement(tag);if(type)e.type=type;if(cls)e.className=cls;e.value=val;if(ph)e.placeholder=ph;return e;
+  }
+  function renderList(){
+    refreshFilters();ensure();
+    var l=$('list');l.innerHTML='';
+    $('sum').textContent='('+recs.length+'件)';
+    if(!recs.length){l.innerHTML='<p class="hint">まだデータがありません</p>';return}
+    var s=recs.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:a.id-b.id});
+    s.slice(0,100).forEach(function(r){
+      var d=document.createElement('div');d.className='rec';
+      var a=mk('input','date','rd',r.date),b=mk('input','text','rn',r.name),c=mk('input','number','rv',r.value);c.step='any';
+      var x=document.createElement('button');x.textContent='✕';x.setAttribute('aria-label','削除');
+      a.onchange=function(){r.date=a.value;changed()};
+      b.oninput=function(){r.name=b.value.trim();changed()};
+      c.oninput=function(){r.value=parseFloat(c.value)||0;changed()};
+      x.onclick=function(){recs=recs.filter(function(o){return o.id!==r.id});changed();renderList()};
+      [a,b,c,x].forEach(function(e){d.appendChild(e)});
+      var d2=document.createElement('div');d2.className='rec rec2';
+      [['group','グループ'],['venue','会場'],['live','ライブ名']].forEach(function(f){
+        var e=mk('input','text','',r[f[0]],f[1]);
+        e.oninput=function(){r[f[0]]=e.value.trim();changed()};
+        e.onchange=refreshFilters;
+        d2.appendChild(e);
+      });
+      l.appendChild(d);l.appendChild(d2);
+    });
+    if(s.length>100){var p=document.createElement('p');p.className='hint';p.textContent='先頭100件を表示中(残り'+(s.length-100)+'件はスプレッドシート側で編集してください)';l.appendChild(p)}
+  }
+  function importRows(rows,msgEl){
+    var add=rowsToRecs(rows);
+    if(!add.length){msgEl.textContent='読み込めるデータがありませんでした。日・項目・値の列があるか確認してください。';return false}
+    if($('repl').checked)recs=[];
+    add.forEach(function(r){addRec(r.d,r.n,r.v,r.g,r.e,r.l)});
+    pause();pos=0;changed();renderList();
+    msgEl.textContent=add.length+'件を読み込みました。';
+    return true;
+  }
+  function add(){
+    var d=$('d'),n=$('n'),v=$('v'),val=parseFloat(v.value);
+    if(!d.value){d.focus();return}
+    if(!n.value.trim()){n.focus();return}
+    if(isNaN(val)){v.focus();return}
+    addRec(d.value,n.value.trim(),val,$('ag').value.trim(),$('ae').value.trim(),$('al').value.trim());
+    n.value='';n.focus();
+    changed();renderList();
+    var f=B.F.map(function(x){return x.date}).indexOf(d.value);if(f>=0)pos=f;
+  }
+
+  /* ---- イベント ---- */
+  $('add').onclick=add;
+  $('n').addEventListener('keydown',function(e){if(e.key==='Enter')add()});
+  $('play').onclick=function(){playing?pause():play()};
+  $('reset').onclick=function(){pause();pos=0;dirty=true};
+  $('seek').oninput=function(){pause();pos=parseFloat(this.value);dirty=true};
+  ['mode','top','unit','color','showg','fg','fv','fl'].forEach(function(i){$(i).onchange=function(){pos=0;changed()}});
+  $('theme').onchange=function(){dirty=true};
+  $('title').oninput=function(){dirty=true};
+  $('shape').onchange=function(){var z={v:[720,1280],s:[720,720],h:[1280,720]}[this.value];cv.width=z[0];cv.height=z[1];dirty=true};
+  $('rec').onclick=startRec;
+  $('save').onclick=function(){if(vidBlob)saveFile('bar-chart-race.'+vidExt,vidBlob,$('rmsg'))};
+  $('clear').onclick=function(){pause();recs=[];pos=0;changed();renderList()};
+  $('import').onclick=function(){if(importRows(parseTable($('bulk').value),$('imsg')))$('bulk').value=''};
+  $('csv').onclick=function(){
+    var q=function(s){return '"'+String(s).replace(/"/g,'""')+'"'};
+    var t='日,項目,値,グループ,会場,ライブ名\n'+recs.map(function(r){
+      return [r.date,q(r.name),r.value,q(r.group),q(r.venue),q(r.live)].join(',');
+    }).join('\n');
+    saveFile('data.csv','\ufeff'+t,$('imsg'));
+  };
+  $('file').onchange=function(){
+    var inp=this,f=inp.files[0];if(!f)return;
+    var ext=f.name.split('.').pop().toLowerCase(),rd=new FileReader(),m=$('imsg');
+    m.textContent='読み込み中…';
+    rd.onload=function(){
+      try{
+        var rows;
+        if(ext==='xlsx'||ext==='xls'||ext==='xlsm'){
+          if(!window.XLSX)throw new Error('Excel読み込み機能を準備できませんでした。CSVで保存してお試しください。');
+          var wb=XLSX.read(new Uint8Array(rd.result),{type:'array'});
+          rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''});
+        }else{
+          var by=new Uint8Array(rd.result),t;
+          try{t=new TextDecoder('utf-8',{fatal:true}).decode(by)}catch(e){t=new TextDecoder('shift_jis').decode(by)}
+          rows=parseTable(t.replace(/^\ufeff/,''));
+        }
+        importRows(rows,m);
+      }catch(e){m.textContent='読み込みに失敗しました。'+e.message}
+      inp.value='';
+    };
+    rd.onerror=function(){m.textContent='ファイルを読み込めませんでした。';inp.value=''};
+    rd.readAsArrayBuffer(f);
+  };
+
+  /* ---- サンプル(お送りいただいたシートの内容) ---- */
+  $('d').value=today();
+  var A='アキシブproject',J='Jams Collection',O='渋谷TSUTAYA O-west',M='Marquee祭 vol.95',Y='横浜ランドマークホール',T='TOKYO GIRLS GIRLS 番外編',Z='Zepp TOKYO';
+  [['2020-01-26','永瀬かのん',1,A,'白金高輪SELENEb2','今夜はアナタの無銭乱舞'],
+   ['2020-02-16','永瀬かのん',1,A,Z,'ワンマンライブ'],['2020-02-16','福山梨乃',1,A,Z,''],['2020-02-16','橘ひより',1,A,Z,''],
+   ['2021-04-08','津代美月',1,J,O,M],['2021-04-08','柚木ひるね',2,J,O,M],['2021-04-08','小波もも',1,J,O,M],
+   ['2021-04-08','保科凜',1,J,O,M],['2021-04-08','咲真ゆか',2,'MyDearDarlin',O,M],
+   ['2021-04-28','青葉ひなり',1,'FES☆TIVE','','人類we are oneness リリースイベント'],['2021-04-28','緑川優愛',1,'FES☆TIVE','','人類we are oneness リリースイベント'],
+   ['2021-05-02','坂下雅',1,'なんキニ',Y,T],['2021-05-02','唐澤ひかり',1,'なんキニ',Y,T],
+   ['2021-05-02','小平明日香',1,'little more',Y,T],['2021-05-02','金谷梨瑚',1,'リトスタ',Y,T]
+  ].forEach(function(s){addRec(s[0],s[1],s[2],s[3],s[4],s[5])});
+  renderList();
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
