@@ -41,7 +41,7 @@ textarea{width:100%;height:90px;font-size:13px;margin-bottom:8px}
 details summary{cursor:pointer;color:var(--sub);font-size:14px}
 #vwrap{display:none;margin-top:12px;text-align:center}
 #prev{max-width:100%;max-height:50vh;border-radius:10px;background:#000}
-#title{flex:1 1 100%}
+#title{flex:1 1 200px}#ut{flex:0 0 80px}
 label.chk{font-size:14px;display:flex;gap:4px;align-items:center}
 label.chk input{padding:0}
 </style>
@@ -80,7 +80,8 @@ label.chk input{padding:0}
 </div>
 
 <div class="card">
-  <div class="form"><input id="title" type="text" placeholder="タイトル(動画に表示)" value="チェキ枚数"></div>
+  <div class="form"><input id="title" type="text" placeholder="タイトル(動画に表示)" value="チェキ枚数">
+    <input id="ut" type="text" value="枚" placeholder="単位" aria-label="単位"></div>
   <div class="tools" style="margin-top:12px"><canvas id="cv" width="720" height="1280"></canvas></div>
   <input id="seek" type="range" min="0" max="0" value="0" step="any" aria-label="日付を選ぶ">
   <div class="tools">
@@ -222,12 +223,13 @@ label.chk input{padding:0}
         cur[k]+=r.value;seen[k]=1;
         if(r.group)cg[k]=gidx.get(r.group);
       }
-      var v=cur.slice(),order=[];
+      var v=cur.slice(),order=[],tt=0;
+      for(var k3=0;k3<N;k3++)tt+=v[k3];
       for(var k2=0;k2<N;k2++)if(seen[k2])order.push(k2);
       order.sort(function(a,b){return v[b]-v[a]||a-b});
       var rank=new Int16Array(N).fill(N);
       order.forEach(function(k,p){rank[k]=p});
-      F.push({date:d,v:v,rank:rank,grp:cg.slice(),lab:cl.slice(),max:order.length?Math.max(v[order[0]],1e-9):1});
+      F.push({date:d,v:v,rank:rank,grp:cg.slice(),lab:cl.slice(),tot:tt,max:order.length?Math.max(v[order[0]],1e-9):1});
     }
     B={names:names,pool:pool,groups:groups,F:F,rows:Math.min(topN,N),int:int,
        useGroup:unit==='name'&&$('color').value==='group',showG:unit==='name'&&$('showg').checked};
@@ -251,6 +253,11 @@ label.chk input{padding:0}
     ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
     ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();ctx.fill();
   }
+  function niceStep(r){
+    if(!(r>0))return 1;
+    var m=Math.pow(10,Math.floor(Math.log10(r))),n=r/m,k=n<1.5?1:n<3?2:n<7?5:10,st=k*m;
+    return B.int?Math.max(1,st):st;
+  }
   function fv(v){return B.int?Math.round(v).toLocaleString():(Math.round(v*10)/10).toLocaleString()}
   function draw(p){
     var W=cv.width,H=cv.height,s=Math.min(W,H)/720,T=theme();
@@ -261,9 +268,23 @@ label.chk input{padding:0}
     if(!n){ctx.fillStyle=T.sub;ctx.font=(26*s)+'px '+FF;ctx.textAlign='center';ctx.fillText('データがありません',W/2,H/2);return}
     var i=Math.min(Math.floor(p),n-1),j=Math.min(i+1,n-1),g=i===j?0:sm(Math.min(1,(p-i)/0.75));
     var a=B.F[i],b=B.F[j],rows=B.rows;
-    var aTop=130*s,aBot=H-120*s,rh=Math.min((aBot-aTop)/rows,84*s);
+    var aTop=156*s,aBot=H-120*s,rh=Math.min((aBot-aTop)/rows,84*s);
     var labelR=200*s,barX=labelR+16*s,barW=W-barX-120*s;
     var max=a.max+(b.max-a.max)*g;
+    var tl=$('mode').value==='cum'?'合計 ':'この日の合計 ';
+    ctx.textAlign='left';ctx.fillStyle=T.sub;ctx.font=(24*s)+'px '+FF;
+    ctx.fillText(tl,40*s,114*s);
+    var tw=ctx.measureText(tl).width;
+    ctx.fillStyle=T.fg;ctx.font='bold '+(44*s)+'px '+FF;
+    ctx.fillText(fv(a.tot+(b.tot-a.tot)*g)+' '+$('ut').value,40*s+tw+8*s,114*s);
+    var bBot=aTop+rows*rh,step=niceStep(max/5);
+    ctx.lineWidth=Math.max(1,s);ctx.textAlign='center';ctx.font=(18*s)+'px '+FF;
+    for(var t=0,c=0;t<=max*1.0001&&c<14;t+=step,c++){
+      var tx=barX+t/max*barW,tv=Math.round(t*1e6)/1e6;
+      ctx.globalAlpha=.25;ctx.strokeStyle=T.sub;ctx.beginPath();ctx.moveTo(tx,aTop);ctx.lineTo(tx,bBot);ctx.stroke();
+      ctx.globalAlpha=.8;ctx.fillStyle=T.sub;ctx.fillText(tv.toLocaleString(),tx,bBot+16*s);
+    }
+    ctx.globalAlpha=1;
     for(var k=0;k<B.names.length;k++){
       var ra=Math.min(a.rank[k],rows),rb=Math.min(b.rank[k],rows);
       var al=(a.rank[k]<rows?1:0)*(1-g)+(b.rank[k]<rows?1:0)*g;
@@ -431,6 +452,7 @@ label.chk input{padding:0}
   ['mode','top','unit','color','showg','fg','fv','fl'].forEach(function(i){$(i).onchange=function(){pos=0;changed()}});
   $('theme').onchange=function(){dirty=true};
   $('title').oninput=function(){dirty=true};
+  $('ut').oninput=function(){dirty=true};
   $('shape').onchange=function(){var z={v:[720,1280],s:[720,720],h:[1280,720]}[this.value];cv.width=z[0];cv.height=z[1];dirty=true};
   $('rec').onclick=startRec;
   $('save').onclick=function(){if(vidBlob)saveFile('bar-chart-race.'+vidExt,vidBlob,$('rmsg'))};
